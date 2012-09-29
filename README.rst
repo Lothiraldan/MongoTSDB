@@ -185,3 +185,18 @@ In order to run tests, you can:
 
  - Run tests files by hand.
  - Install nosetests (pip install nose) and run it from project root.
+
+Contribute
+----------
+
+If you'd like to contribute, simply fork the `repository <https://github.com/Lothiraldan/MongoTSDB>`_, commit your changes to the develop branch (or branch off of it), and send a pull request. Make sure you add yourself to AUTHORS.
+
+Copyright and license
+---------------------
+
+Copyright 2011-2012 FELD Boris
+
+Licensed under the GPL License, Version 3;  you may not use this work except in compliance with the License. You may obtain a copy of the License in the LICENSE file, or at:
+
+`http://www.gnu.org/licenses/gpl-3.0.txt 
+<http://www.gnu.org/licenses/gpl-3.0.txt>`_
