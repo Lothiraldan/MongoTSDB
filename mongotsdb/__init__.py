@@ -1,5 +1,8 @@
 from pymongo import Connection
 
+from datetime import datetime
+
+from ranges import Range, SubRange, RangeSet, MultiRange
 
 class TSDB(object):
     def __init__(self, database_name):
@@ -16,6 +19,19 @@ class TSDB(object):
 
     def request(self, request):
         request = request.copy()
+
+        step = request['step']
+
+        # Make start and stop match step boundaries
+        start = request['start']
+        start = start - (start % step)
+        request['start'] = start
+
+        stop = request['stop']
+        if stop % step:
+            stop = stop + (step - (stop % step))
+            request['stop'] = stop
+
         request_call = request.pop("request")
         aggregation_function, metric_name = self._parse_request(request_call)
         tags = request.pop("tags", [])
@@ -25,7 +41,23 @@ class TSDB(object):
         if pipeline is None:
             raise Exception("Could not generate pipeline")
 
-        result = self.db.command({'aggregate': metric_name, 'pipeline': pipeline})
+        result = self.db[metric_name].aggregate(pipeline)
+
+        # Save results into cache
+        cache_collection = self.db['%s.cache' % metric_name]
+        # Ensure TTL
+        cache_collection.ensure_index('cdate',
+            expireAfterSeconds=5*60)
+
+        for r in result['result']:
+            cache_document = {}
+            date = r.get('_id')['date']
+            cache_document['date'] = date
+            cache_document['value'] = r['value']
+            cache_document['step'] = step
+            # cache_document['']
+            cache_document['cdate'] = datetime.now()
+            cache_collection.insert(cache_document)
 
         return result['result']
 
