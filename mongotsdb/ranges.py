@@ -73,6 +73,8 @@ class Range(object):
 
                 self.sub_ranges.append(subrange)
 
+                break
+
     def get_missing_ranges(self):
         return self.missing_ranges
 
