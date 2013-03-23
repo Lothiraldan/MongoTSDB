@@ -1,6 +1,6 @@
 import unittest
 
-from mongotsdb import Range, SubRange, RangeSet, MultiRange
+from mongotsdb import Range, SubRange, RangeSet, MultiRangeWorker, RangeWorker
 
 class RangeTestCase(unittest.TestCase):
 
@@ -94,28 +94,20 @@ class RangeSetTestCase(unittest.TestCase):
         self.range_set = RangeSet(self.start, self.stop, self.step)
 
     def test_simple(self):
-        ranges = list(self.range_set.get_sub_ranges())
+        workers = list(self.range_set.generate_workers())
 
-        expected_ranges = [SubRange(0, 9), SubRange(10, 19), SubRange(20, 29),
-            SubRange(30, 39), SubRange(40, 49)]
-        self.assertEqual(ranges, expected_ranges)
+        expected_workers = [MultiRangeWorker(0, 49, 10)]
+
+        self.assertEqual(workers, expected_workers)
 
     def test_add_subrange(self):
-        sub_range = SubRange(12, 15)
+        sub_range = SubRange(22, 25, value=42)
         self.range_set.add_sub_range(sub_range)
 
-        ranges = list(self.range_set.get_sub_ranges())
-        expected_ranges = [SubRange(0, 9), SubRange(10, 11), SubRange(16, 19),
-            SubRange(20, 29), SubRange(30, 39), SubRange(40, 49)]
-        self.assertEqual(ranges, expected_ranges)
+        workers = list(self.range_set.generate_workers())
 
-    def test_smart_ranges(self):
-        self.assertEqual(self.range_set.smart_ranges(), [MultiRange(0, 49, 10)])
-
-    def test_smart_ranges_and_subrange(self):
-        sub_range = SubRange(22, 25)
-        self.range_set.add_sub_range(sub_range)
-
-        expected = [MultiRange(0, 19, 10), SubRange(20, 21), SubRange(26, 29),
-            MultiRange(30, 49, 10)]
-        self.assertEqual(self.range_set.smart_ranges(), expected)
+        partial_range_worker = RangeWorker(missing=[SubRange(20, 21),
+            SubRange(26, 29)], partial=[sub_range])
+        expected_workers = [MultiRangeWorker(0, 19, 10),
+            partial_range_worker, MultiRangeWorker(30, 49, 10)]
+        self.assertEqual(workers, expected_workers)

@@ -2,7 +2,7 @@ from pymongo import Connection
 
 from datetime import datetime
 
-from ranges import Range, SubRange, RangeSet, MultiRange
+from ranges import *
 
 class TSDB(object):
     def __init__(self, database_name):

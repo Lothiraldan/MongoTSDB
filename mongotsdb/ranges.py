@@ -14,11 +14,11 @@ class RangeSet(object):
             for subrange in range.get_missing_ranges():
                 yield subrange
 
-    def smart_ranges(self):
+    def generate_workers(self):
         smart_start = None
         smart_stop = None
 
-        ranges = []
+        workers = []
 
         for range in self.ranges:
             # First range or last one was not a multi range
@@ -30,16 +30,18 @@ class RangeSet(object):
                     smart_stop = range.stop
             else:
                 if smart_start is not None:
-                    ranges.append(MultiRange(smart_start, smart_stop, self.step))
+                    workers.append(MultiRangeWorker(smart_start, smart_stop,
+                        self.step))
                     smart_start = None
                     smart_stop = None
 
-                ranges.extend(range.get_missing_ranges())
+                workers.append(RangeWorker(range.missing_ranges,
+                    range.sub_ranges))
 
         if smart_start is not None:
-            ranges.append(MultiRange(smart_start, smart_stop, self.step))
+            workers.append(MultiRangeWorker(smart_start, smart_stop, self.step))
 
-        return ranges
+        return workers
 
     def add_sub_range(self, subrange):
         corresponding_range = (subrange.start / self.step)
@@ -61,8 +63,6 @@ class Range(object):
         return len(self.missing_ranges) == 0
 
     def is_partial(self):
-        print self.sub_ranges
-        print self.missing_ranges
         return len(self.sub_ranges) != 0 and len(self.missing_ranges) != 0
 
     def add_sub_range(self, subrange):
@@ -90,7 +90,7 @@ class SubRange(object):
     def __init__(self, start, stop, value=None):
         self.start = start
         self.stop = stop
-        self.value = None
+        self.value = value
 
     def __eq__(self, subrange):
         return self.__dict__ == subrange.__dict__
@@ -124,12 +124,27 @@ class SubRange(object):
                 SubRange(subrange.stop + 1, self.stop)]
 
 
-class MultiRange(object):
+# Workers
 
+class MultiRangeWorker(object):
     def __init__(self, start, stop, step):
         self.start = start
         self.stop = stop
         self.step = step
+
+    def __eq__(self, subrange):
+        return self.__dict__ == subrange.__dict__
+
+    def __str__(self):
+        return '%s(%s)' % (self.__class__.__name__, self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
+
+class RangeWorker(object):
+    def __init__(self, missing, partial):
+        self.missing = missing
+        self.partial = partial
 
     def __eq__(self, subrange):
         return self.__dict__ == subrange.__dict__
