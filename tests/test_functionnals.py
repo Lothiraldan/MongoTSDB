@@ -17,6 +17,7 @@ class FunctionnalTestCase(unittest.TestCase):
     def tearDown(self):
         # Clear db
         Connection()[self.database_name][self.metric_name].remove()
+        Connection()[self.database_name]['%s.cache' % self.metric_name].remove()
 
 
 class InsertionTestCase(FunctionnalTestCase):
@@ -69,7 +70,7 @@ class RequestTestCase(FunctionnalTestCase):
 
         # Make request
         request = {'request': 'sum(%s)' % self.metric_name, 'start': 0,
-            'stop': 20, 'step': 10}
+            'stop': 19, 'step': 10}
         result = self.tsdb.request(request=request)
 
         # Check return
@@ -145,3 +146,33 @@ class RequestTestCase(FunctionnalTestCase):
 
         # Check return
         self.assertEqual(expected, result[0]['value'])
+
+class RequestCacheTestCase(FunctionnalTestCase):
+
+    def test_simple_sum_request(self):
+        # Define metrics
+        for i in range(20):
+            self.tsdb.insert({'date': i, 'value': i*10, 'name': 'sample'})
+
+        # Make request
+        request = {'request': 'sum(%s)' % self.metric_name, 'start': 0,
+            'stop': 9, 'step': 2}
+        result = self.tsdb.request(request=request)
+
+        # Check return
+        expected = [{'_id': {'date': 0}, 'value': 10},
+            {'_id': {'date': 2}, 'value': 50},
+            {'_id': {'date': 4}, 'value': 90},
+            {'_id': {'date': 6}, 'value': 130},
+            {'_id': {'date': 8}, 'value': 170}]
+        self.assertItemsEqual(result, expected)
+
+        # Make new request
+        request = {'request': 'sum(%s)' % self.metric_name, 'start': 0,
+            'stop': 19, 'step': 10}
+        result = self.tsdb.request(request=request)
+
+        # Check return
+        expected = [{'_id': {'date': 10}, 'value': 1450},
+            {'_id': {'date': 0}, 'value': 450}]
+        self.assertItemsEqual(result, expected)

@@ -6,7 +6,7 @@ class RangeTestCase(unittest.TestCase):
 
     def setUp(self):
         self.start = 0
-        self.stop = 8
+        self.stop = 7
         self.step = self.stop - self.start
         self.r = Range(self.start, self.stop)
 
@@ -25,12 +25,12 @@ class RangeTestCase(unittest.TestCase):
         self.assertTrue(self.r.is_partial())
         self.assertFalse(self.r.is_full())
 
-        expected_subrange = SubRange(4, 8)
+        expected_subrange = SubRange(4, 7)
         self.assertEqual(self.r.get_missing_ranges(), [expected_subrange])
 
     def test_sub_range_end(self):
         value = 42
-        sub_range = SubRange(4, 8, value)
+        sub_range = SubRange(4, 7, value)
 
         self.r.add_sub_range(sub_range)
 
@@ -52,13 +52,13 @@ class RangeTestCase(unittest.TestCase):
         self.assertFalse(self.r.is_full())
 
         expected_subrange_1 = SubRange(0, 1)
-        expected_subrange_2 = SubRange(7, 8)
+        expected_subrange_2 = SubRange(7, 7)
         self.assertEqual(self.r.get_missing_ranges(), [expected_subrange_1,
             expected_subrange_2])
 
     def test_sub_range_full(self):
         value = 42
-        sub_range = SubRange(0, 8, value)
+        sub_range = SubRange(0, 7, value)
 
         self.r.add_sub_range(sub_range)
 
@@ -73,7 +73,7 @@ class RangeTestCase(unittest.TestCase):
         sub_range1 = SubRange(0, 3, value)
 
         value = 42
-        sub_range2 = SubRange(4, 8, value)
+        sub_range2 = SubRange(4, 7, value)
 
         self.r.add_sub_range(sub_range1)
         self.r.add_sub_range(sub_range2)
@@ -106,8 +106,12 @@ class RangeSetTestCase(unittest.TestCase):
 
         workers = list(self.range_set.generate_workers())
 
-        partial_range_worker = RangeWorker(missing=[SubRange(20, 21),
-            SubRange(26, 29)], partial=[sub_range])
+        expected_range = Range(20, 29)
+        expected_range.missing_ranges = [SubRange(20, 21),
+            SubRange(26, 29)]
+        expected_range.sub_ranges = [sub_range]
+        partial_range_worker = RangeWorker(expected_range)
+
         expected_workers = [MultiRangeWorker(0, 19, 10),
             partial_range_worker, MultiRangeWorker(30, 49, 10)]
         self.assertEqual(workers, expected_workers)

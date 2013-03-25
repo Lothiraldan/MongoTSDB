@@ -1,9 +1,15 @@
+from pipeline import PipelineGenerator
+
 class RangeSet(object):
 
-    def __init__(self, start, stop, step):
+    def __init__(self, start, stop, step, function=None, tags=None,
+            collection=None):
         self.start = start
         self.stop = stop
         self.step = step
+        self.function = function
+        self.tags = tags
+        self.collection = collection
 
         self.ranges = []
         for n in range(start, stop, step):
@@ -31,15 +37,16 @@ class RangeSet(object):
             else:
                 if smart_start is not None:
                     workers.append(MultiRangeWorker(smart_start, smart_stop,
-                        self.step))
+                        self.step, self.function, self.tags, self.collection))
                     smart_start = None
                     smart_stop = None
 
-                workers.append(RangeWorker(range.missing_ranges,
-                    range.sub_ranges))
+                workers.append(RangeWorker(range, self.function, self.tags,
+                    self.collection))
 
         if smart_start is not None:
-            workers.append(MultiRangeWorker(smart_start, smart_stop, self.step))
+            workers.append(MultiRangeWorker(smart_start, smart_stop,
+                self.step, self.function, self.tags, self.collection))
 
         return workers
 
@@ -79,7 +86,9 @@ class Range(object):
         return self.missing_ranges
 
     def __str__(self):
-        return '%s(%s)' % (self.__class__.__name__, self.__dict__)
+        self_dict = self.__dict__.copy()
+        self_dict.pop('missing_ranges')
+        return '%s(%s)' % (self.__class__.__name__, self_dict)
 
     def __repr__(self):
         return self.__str__()
@@ -127,10 +136,14 @@ class SubRange(object):
 # Workers
 
 class MultiRangeWorker(object):
-    def __init__(self, start, stop, step):
+    def __init__(self, start, stop, step, aggregation_function=None, tags=None,
+            collection=None):
         self.start = start
         self.stop = stop
         self.step = step
+        self.aggregation_function = aggregation_function
+        self.tags = tags
+        self.collection = collection
 
     def __eq__(self, subrange):
         return self.__dict__ == subrange.__dict__
@@ -140,11 +153,29 @@ class MultiRangeWorker(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def compute(self):
+        generator = PipelineGenerator()
+        pipeline = generator.dispatch_function(self.start, self.stop, self.step,
+            self.aggregation_function, self.tags)
+        return self.collection.aggregate(pipeline)['result']
 
 class RangeWorker(object):
-    def __init__(self, missing, partial):
-        self.missing = missing
-        self.partial = partial
+
+    functions = {
+        'sum': sum,
+        'min': min,
+        'max': max
+    }
+
+    def __init__(self, range, aggregation_function=None,
+            tags=None, collection=None):
+        self.start = range.start
+        self.missing = range.missing_ranges
+        self.partial = range.sub_ranges
+        self.aggregation_function = aggregation_function
+        self.tags = tags
+        self.collection = collection
 
     def __eq__(self, subrange):
         return self.__dict__ == subrange.__dict__
@@ -154,3 +185,21 @@ class RangeWorker(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def compute(self):
+        generator = PipelineGenerator()
+
+        results = []
+
+        generator = PipelineGenerator()
+        for sub_range in self.missing:
+            pipeline = generator.dispatch_function(sub_range.start, sub_range.stop,
+                function=self.aggregation_function, tags=self.tags)
+            results.append(self.collection.aggregate(pipeline)['result'][0]['value'])
+
+        function = self.functions[self.aggregation_function]
+
+        results.extend([x.value for x in self.partial])
+
+        return [{'_id': {'date': self.start}, 'value': function(results)}]
+

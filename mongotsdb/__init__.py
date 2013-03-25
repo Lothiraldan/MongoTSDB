@@ -1,13 +1,12 @@
 from pymongo import Connection
-
 from datetime import datetime
+from itertools import chain
 
 from ranges import *
 
 class TSDB(object):
     def __init__(self, database_name):
         self.db = Connection()[database_name]
-        self.aggregator = Aggregator()
 
     def insert(self, metric, **tags):
         metric_name = metric.pop("name")
@@ -20,105 +19,75 @@ class TSDB(object):
     def request(self, request):
         request = request.copy()
 
-        step = request['step']
+        step = request.pop('step')
 
         # Make start and stop match step boundaries
-        start = request['start']
-        start = start - (start % step)
-        request['start'] = start
+        start = request.pop('start')
+        # start = start - (start % step)
 
-        stop = request['stop']
-        if stop % step:
-            stop = stop + (step - (stop % step))
-            request['stop'] = stop
+        stop = request.pop('stop')
+        # if stop % step:
+        #     stop = stop + (step - (stop % step))
 
         request_call = request.pop("request")
         aggregation_function, metric_name = self._parse_request(request_call)
-        tags = request.pop("tags", [])
+        tags = request.pop("tags", {})
 
-        pipeline = self.aggregator.dispatch_function(aggregation_function, request, tags)
+        collection = self.db[metric_name]
+        cache_collection = self.db['%s.cache' % metric_name]
 
-        if pipeline is None:
-            raise Exception("Could not generate pipeline")
+        # If avg is function or tags wildcard value is used, cannot use cache
+        if aggregation_function == 'avg' or '*' in tags.values():
+            worker = MultiRangeWorker(start, stop, step, aggregation_function,
+                tags, collection)
+            result = worker.compute()
+            # self.save_result_in_cache(result, metric_name, step, aggregation_function)
+            return result
+        else:
+            range_set = RangeSet(start, stop, step, aggregation_function, tags,
+                collection)
 
-        result = self.db[metric_name].aggregate(pipeline)
+            # Compute possibles steps size
+            steps = [step]
+            steps_divisors = [2, 4, 5, 6, 7, 10, 12, 24]
+            for divisor in steps_divisors:
+                new_step = step/float(divisor)
+                if new_step.is_integer():
+                    steps.append(int(new_step))
 
+
+            cache_request = {'function': aggregation_function,
+                'step': {'$in': steps}, 'date': {'$gte': start, '$lt': stop}}
+
+            caches = cache_collection.find(cache_request).sort('step', -1).sort('date')
+            for cache in caches:
+                range_set.add_sub_range(SubRange(cache['date'],
+                    cache['date'] + (cache['step'] - 1), cache['value']))
+
+            workers = range_set.generate_workers()
+            results = list(chain.from_iterable([w.compute() for w in workers]))
+
+            self.save_result_in_cache(results, metric_name, step,
+                aggregation_function)
+
+            return results
+
+    def save_result_in_cache(self, result, metric_name, step, function):
         # Save results into cache
         cache_collection = self.db['%s.cache' % metric_name]
         # Ensure TTL
         cache_collection.ensure_index('cdate',
             expireAfterSeconds=5*60)
 
-        for r in result['result']:
+        for r in result:
             cache_document = {}
             date = r.get('_id')['date']
             cache_document['date'] = date
             cache_document['value'] = r['value']
             cache_document['step'] = step
-            # cache_document['']
+            cache_document['function'] = function
             cache_document['cdate'] = datetime.now()
             cache_collection.insert(cache_document)
 
-        return result['result']
-
     def _parse_request(self, request_call):
         return request_call.replace('(', ' ').replace(')', '').split()
-
-
-class Aggregator(object):
-
-    def dispatch_function(self, function, args, tags):
-        pipeline = [self._request_match(args['start'], args['stop'], tags),
-            self._aggregate_date(args['step'], tags)]
-
-        function_call = getattr(self, function, None)
-
-        if function_call is None:
-            return None
-
-        pipeline.append(self._regroup(function_call(), tags))
-
-        return pipeline
-
-    # Operator
-
-    def sum(self):
-        return '$sum'
-
-    def min(self):
-        return '$min'
-
-    def max(self):
-        return '$max'
-
-    def avg(self):
-        return '$avg'
-
-    # Util function
-
-    def _request_match(self, start, stop, tags):
-        base = {'$match': {'date': {'$gte': start, '$lt': stop}}}
-
-        for tag in tags:
-            if tags[tag] != '*':
-                base['$match']['tags.%s' % tag] = tags[tag]
-
-        return base
-
-    def _aggregate_date(self, step, tags):
-        base = {'$project': {'value': 1, 'date': {'$subtract':
-            ['$date', {'$mod': ['$date', step]}]}}}
-
-        for tag in tags:
-            base['$project']['tags.%s' % tag] = 1
-
-        return base
-
-    def _regroup(self, function_name, tags):
-        base = {'$group': {'_id': {'date': '$date'}, 'value':
-            {function_name: '$value'}}}
-
-        for tag in tags:
-            base['$group']['_id'].setdefault('tags', {})['%s' % tag] = '$tags.%s' % tag
-
-        return base
