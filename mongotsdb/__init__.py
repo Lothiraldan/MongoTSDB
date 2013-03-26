@@ -47,22 +47,8 @@ class TSDB(object):
             range_set = RangeSet(start, stop, step, aggregation_function, tags,
                 collection)
 
-            # Compute possibles steps size
-            steps = [step]
-            steps_divisors = [2, 4, 5, 6, 7, 10, 12, 24]
-            for divisor in steps_divisors:
-                new_step = step/float(divisor)
-                if new_step.is_integer():
-                    steps.append(int(new_step))
-
-
-            cache_request = {'function': aggregation_function,
-                'step': {'$in': steps}, 'date': {'$gte': start, '$lt': stop}}
-
-            caches = cache_collection.find(cache_request).sort('step', -1).sort('date')
-            for cache in caches:
-                range_set.add_sub_range(SubRange(cache['date'],
-                    cache['date'] + (cache['step'] - 1), cache['value']))
+            self._load_from_cache(start, stop, step, aggregation_function,
+                range_set, cache_collection)
 
             workers = range_set.generate_workers()
             results = list(chain.from_iterable([w.compute() for w in workers]))
@@ -71,6 +57,25 @@ class TSDB(object):
                 aggregation_function)
 
             return results
+
+    def _load_from_cache(self, start, stop, step, aggregation_function,
+            range_set, cache_collection):
+        # Compute possibles steps size
+        steps = [step]
+        steps_divisors = [2, 4, 5, 6, 7, 10, 12, 24]
+        for divisor in steps_divisors:
+            new_step = step/float(divisor)
+            if new_step.is_integer():
+                steps.append(int(new_step))
+
+
+        cache_request = {'function': aggregation_function,
+            'step': {'$in': steps}, 'date': {'$gte': start, '$lt': stop}}
+
+        caches = cache_collection.find(cache_request).sort('step', -1).sort('date')
+        for cache in caches:
+            range_set.add_sub_range(SubRange(cache['date'],
+                cache['date'] + (cache['step'] - 1), cache['value']))
 
     def save_result_in_cache(self, result, metric_name, step, function):
         # Save results into cache
