@@ -176,3 +176,33 @@ class RequestCacheTestCase(FunctionnalTestCase):
         expected = [{'_id': {'date': 10}, 'value': 1450},
             {'_id': {'date': 0}, 'value': 450}]
         self.assertItemsEqual(result, expected)
+
+    def test_with_tags(self):
+        # Define metrics
+        for i in range(20):
+            self.tsdb.insert({'date': i, 'value': i*10, 'name': 'sample',
+                'tags': {'even': i%2}})
+
+        # Make request
+        request = {'request': 'sum(%s)' % self.metric_name, 'start': 0,
+            'stop': 9, 'step': 2, 'tags': {'even': 0}}
+        result = self.tsdb.request(request=request)
+
+        # Check return
+        expected = [{'_id': {'date': 0, 'tags': {'even': 0}}, 'value': 0},
+            {'_id': {'date': 2, 'tags': {'even': 0}}, 'value': 20},
+            {'_id': {'date': 4, 'tags': {'even': 0}}, 'value': 40},
+            {'_id': {'date': 6, 'tags': {'even': 0}}, 'value': 60},
+            {'_id': {'date': 8, 'tags': {'even': 0}}, 'value': 80}]
+        self.assertItemsEqual(result, expected)
+
+        # Make new request
+        request = {'request': 'sum(%s)' % self.metric_name, 'start': 0,
+            'stop': 19, 'step': 10, 'tags': {'even': 0}}
+        result = self.tsdb.request(request=request)
+
+        # Check return
+        expected = [{'_id': {'date': 10, 'tags': {'even': 0}}, 'value': 700},
+            {'_id': {'date': 0, 'tags': {'even': 0}}, 'value': 200}]
+        print "Result", result, expected
+        self.assertItemsEqual(result, expected)

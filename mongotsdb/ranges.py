@@ -219,5 +219,10 @@ class RangeWorker(object):
 
         results.extend([x.value for x in self.partial])
 
-        return [{'_id': {'date': self.start}, 'value': function(results)}]
+        id_doc = {'date': self.start}
+
+        if self.tags:
+            id_doc['tags'] = self.tags
+
+        return [{'_id': id_doc, 'value': function(results)}]
 
