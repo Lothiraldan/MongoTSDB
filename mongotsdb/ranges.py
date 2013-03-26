@@ -12,8 +12,23 @@ class RangeSet(object):
         self.collection = collection
 
         self.ranges = []
+
+        # Check if start is aligned to step
+        if start % step != 0:
+            first_end = start + step - (start % step) - 1
+            self.ranges.append(Range(start, first_end))
+            start = first_end + 1
+
+        # Check if stop is aligned to step
+        if (stop + 1) % step != 0:
+            stop = stop - (stop % step)
+
         for n in range(start, stop, step):
             self.ranges.append(Range(n, (n + step) - 1))
+
+        # Check if stop is aligned to step
+        if stop != self.stop:
+            self.ranges.append(Range(stop, self.stop))
 
     def get_sub_ranges(self):
         for range in self.ranges:
@@ -84,6 +99,9 @@ class Range(object):
 
     def get_missing_ranges(self):
         return self.missing_ranges
+
+    def __eq__(self, subrange):
+        return self.__dict__ == subrange.__dict__
 
     def __str__(self):
         self_dict = self.__dict__.copy()

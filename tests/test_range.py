@@ -115,3 +115,13 @@ class RangeSetTestCase(unittest.TestCase):
         expected_workers = [MultiRangeWorker(0, 19, 10),
             partial_range_worker, MultiRangeWorker(30, 49, 10)]
         self.assertEqual(workers, expected_workers)
+
+    def test_not_aligned_ranges(self):
+        start = 5
+        stop = 25
+        step = 10
+        range_set = RangeSet(start, stop, step)
+
+        self.assertEqual(range_set.ranges, [Range(5, 9), Range(10, 19),
+            Range(20, 25)])
+
